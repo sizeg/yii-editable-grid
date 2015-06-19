@@ -53,7 +53,33 @@ class EditableButtonColumn extends CButtonColumn {
 	 * This property is used only if <code>$this->buttons['removeRow']['click']</code> is not set.
 	 */
 	public $afterRemoveRow;
+
+	/**
+	 * @var string The label for the restore row button. Defaults to "Restore".
+	 * Note that the label will not be HTML-encoded when rendering.
+	 */
+	public $restoreRowButtonLabel;
+
+	/**
+	 * @var string The image URL for the restore row button. If not set, an integrated image will be used.
+	 * You may set this property to be false to render a text link instead.
+	 */
+	public $restoreRowButtonImageUrl;
+
+	/**
+	 * @var array the HTML options for the restore row button tag.
+	 */
+	public $restoreRowButtonOptions = array( 'class' => 'restoreRow' );
+
+	/**
+	 * @var string a javascript function that will be invoked after the restoring row.
+	 */
+	public $afterRestoreRow;
 	
+	/**
+	 * @var string the template that is used to render the content in each data cell.
+	 * (@see CButtonColumn.template)
+	 */
 	public $template = '{removeRow}';
 
 	/**
@@ -61,11 +87,19 @@ class EditableButtonColumn extends CButtonColumn {
 	 */
 	protected function initDefaultButtons(){
 		parent::initDefaultButtons();
+
 		if ( $this->removeRowButtonLabel === null ) {
 			$this->removeRowButtonLabel = Yii::t( 'zii', 'Delete' );
 		}
+
 		if ( $this->removeRowConfirmation === null ) {
 			$this->removeRowConfirmation = Yii::t( 'zii', 'Are you sure you want to delete this item?' );
+		}
+		
+		if ( $this->grid->restoreDeletedRows ) {
+			if ( $this->restoreRowButtonLabel === null ) {
+				$this->restoreRowButtonLabel = Yii::t( 'editablegrid.editablegrid', 'Restore' );
+			}
 		}
 
 		$id = 'removeRow';
@@ -103,7 +137,54 @@ class EditableButtonColumn extends CButtonColumn {
 				$this->afterRemoveRow = 'function(){}';
 			}
 
-			$this->buttons[ $id ][ 'click' ] = <<<EOD
+			// Allow to restore deleted rows
+			if ( $this->grid->restoreDeletedRows ) {
+				if ( $this->afterRestoreRow === null ) {
+					$this->afterRestoreRow = 'function(){}';
+				}
+
+				if ( !empty( $this->restoreRowButtonImageUrl ) ) {
+					$restore_link = CHtml::link( CHtml::image( $this->restoreRowButtonImageUrl, $this->restoreRowButtonLabel ), '#', $this->removeRowButtonOptions );
+				} else {
+					$restore_link = CHtml::link( $this->restoreRowButtonLabel, '#', $this->restoreRowButtonOptions );
+				}
+				$label = isset( $button[ 'label' ] ) ? $button[ 'label' ] : $id;
+
+				$columns = sizeof( $this->grid->columns );
+				$this->buttons[ $id ][ 'click' ] = <<<EOD
+function(){
+	$confirmation
+	var th = this,
+		afterDelete = {$this->afterRemoveRow},
+		tr = $(this).parents("tr");
+
+	tr.find('input,select').each(function(){
+		$(this).prop('disabled',true);
+	});
+	tr.after('<tr><td colspan="{$columns}">{$restore_link}</td></tr>');
+	tr.hide();
+	afterDelete(th);
+	return false;
+}
+EOD;
+				
+				Yii::app()->getClientScript()->registerScript(__CLASS__.'#'.$this->id.'-restoreRow',"
+jQuery(document).on('click','#{$this->grid->id} a.restoreRow',function(){
+	var th = this,
+		tr = $(this).parents('tr'),
+		real_tr = tr.prev('tr'),
+		afterRestore = {$this->afterRestoreRow};
+
+	tr.remove();
+	real_tr.show();
+	real_tr.find('input,select').each(function(){
+		$(this).prop('disabled',false);
+	});
+	afterRestore(th);
+});
+			");
+			} else {
+				$this->buttons[ $id ][ 'click' ] = <<<EOD
 function(){
 	$confirmation
 	var th = this,
@@ -113,6 +194,7 @@ function(){
 	return false;
 }
 EOD;
+			}
 		}
 	}
 	
