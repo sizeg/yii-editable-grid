@@ -4,7 +4,7 @@ Yii::import('zii.widgets.grid.CGridView');
 /**
  * EditableGrid class file.
  *
- * @author Dyomin Dmitry <sizemail@gmail.com>
+ * @author Demin Dmitry <sizemail@gmail.com>
  * @link http://size.perm.ru/yii-editable-grid
  * @copyright 2014 SiZE
  */
@@ -14,6 +14,11 @@ class EditableGrid extends CGridView {
 	 * @var int Grids counter
 	 */
 	private static $_grid_counter = 0;
+
+	/**
+	 * @var int Manual grid number
+	 */
+	public $gridNum;
 
 	/**
 	 * @var string The label for the add row button. Defaults to "Add new row"
@@ -48,7 +53,7 @@ class EditableGrid extends CGridView {
 	protected $rowTemplateId;
 
 	/**
-	 * @var string Row primary key. Used to generate hidden field with primaryKey from db
+	 * @var string Row primary key. Used to generate hidden field with primaryKey from DB
 	 */
 	public $primaryKey = '[{gridNum}][{rowNum}]id';
 
@@ -56,6 +61,19 @@ class EditableGrid extends CGridView {
 	 * @var array the HTML options for the hidden field primaryKey
 	 */
 	public $primaryKeyHtmlOptions = array();
+
+	/**
+	 * @var int the number of table body rows that can be selected
+	 */
+	public $selectableRows = 0;
+
+	/**
+	 * @var bool whether to restore deleted rows. Set this property to true to
+	 * enable lazy delete.
+	 */
+	public $restoreDeletedRows = false;
+
+	protected $markDeletedRowsInputId;
 
 	public function init(){
 		parent::init();
@@ -73,18 +91,42 @@ class EditableGrid extends CGridView {
 				$this->buttonCreateRowClick = new CJavaScriptExpression( $this->buttonCreateRowClick );
 			}
 		}
+
+		if ( $this->restoreDeletedRows ) {
+			$this->markDeletedRowsInputId = 'mark-deleted-'.$this->id;
+			$this->initRestoreDeletedRowsInput();
+		}
 	}
 
 	/**
 	 * @return int
 	 */
 	public function getGridCounter(){
-		return self::$_grid_counter;
+		if ( $this->gridNum === null ) {
+			return self::$_grid_counter;
+		} else {
+			return $this->gridNum;
+		}
 	}
 
 	public function initButtonCreateRow(){
 		if ( $this->afterCreateRow === null ) {
 			$this->afterCreateRow = 'function(){}';
+		}
+
+		$class = '';
+		// @todo rowCssClassExpression support (@see CGridView.renderTableRow)
+		if ( is_array( $this->rowCssClass ) && ($n = count( $this->rowCssClass ) ) > 0 ) {
+			$class = "
+	var rowCssClass = ".CJSON::encode( $this->rowCssClass ).",
+		rowClass = rowCssClass[ ( rowNum % ".$n." ) ];
+	
+	if ( /<tr[^>]+class[^>]+/.test(rowTpl) ) {
+		rowTpl = rowTpl.replace(/<tr([^>]+)class=(\"|')([^'\"]*)(\"|')/,'<tr$1class=$2$3 '+rowClass+'$4');
+	} else {
+		rowTpl = rowTpl.replace(/(<tr[^>]*)/,'$1 class=\"'+rowClass+'\"');
+	}
+			";
 		}
 
 		$this->buttonCreateRowClick = <<<EOD
@@ -94,13 +136,15 @@ function(){
 		rowTpl = $('#{$this->rowTemplateId}').val(),
 		rowNum = $('#{$this->id} tbody tr').length,
 		placeholders = [{p:'gridNum',v:'{$this->getGridCounter()}'},{p:'rowNum',v:rowNum}];
+	
+	{$class}
 
-		for(var i=0; i<placeholders.length; i++){
-			rowTpl = rowTpl.replace(new RegExp("\{"+placeholders[i].p+"\}", "g"), placeholders[i].v);
-		}
-		$('#{$this->id} tbody').append( rowTpl );
+	for(var i=0; i<placeholders.length; i++){
+		rowTpl = rowTpl.replace(new RegExp("\{"+placeholders[i].p+"\}", "g"), placeholders[i].v);
+	}
+	$('#{$this->id} tbody').append( rowTpl );
 
-		afterCreateRow();
+	afterCreateRow();
 }
 EOD;
 	}
@@ -122,6 +166,10 @@ EOD;
 		echo CHtml::button( $this->buttonCreateRowLabel, $this->buttonCreateRowOptions );
 
 		echo CHtml::textArea( '', $this->rowTemplate, array( 'id' => $this->rowTemplateId, 'style' => 'display: none;' ) );
+	}
+
+	public function initRestoreDeletedRowsInput(){
+		echo CHtml::hiddenField( 'delete', '', array( 'id' => $this->markDeletedRowsInputId ) );
 	}
 
 }
