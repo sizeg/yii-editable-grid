@@ -81,7 +81,3 @@ $this->widget('EditableGrid', array(
 	),
 ));
 ```
-
-##Demo
-Please see **[size.perm.ru/yii-editable-grid/](http://size.perm.ru/yii-editable-grid/)**
-
